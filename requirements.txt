@@ -1,6 +1,7 @@
 streamlit
 tensorflow
 transformers
+tf-keras
 beautifulsoup4
 requests
 fuzzywuzzy
