@@ -1,0 +1,8 @@
+streamlit
+tensorflow
+transformers
+beautifulsoup4
+requests
+fuzzywuzzy
+joblib
+PyPDF2
