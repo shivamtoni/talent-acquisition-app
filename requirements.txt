@@ -2,8 +2,13 @@ streamlit
 tensorflow
 transformers
 tf-keras
+keras-tuner
 beautifulsoup4
 requests
 joblib
 PyPDF2
 geopy
+pandas
+matplotlib
+seaborn
+scikit-learn
