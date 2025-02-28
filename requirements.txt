@@ -6,3 +6,5 @@ beautifulsoup4
 requests
 joblib
 PyPDF2
+geodesic
+Nominatim
