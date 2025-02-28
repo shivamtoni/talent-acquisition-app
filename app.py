@@ -11,7 +11,7 @@ import re
 import joblib
 import os
 from PyPDF2 import PdfReader
-from geopy.distance import geodesic
+from geopy.distance import distance
 from geopy.geocoders import Nominatim
 
 # Load the trained model
@@ -52,7 +52,7 @@ def is_location_nearby(resume, target_location):
         return 0
     for city in cities:
         city_coords = get_coordinates(city)
-        if city_coords and geodesic(target_coords, city_coords).km <= 50:  # 50 km radius
+        if city_coords and distance(target_coords, city_coords).km <= 50:  # 50 km radius
             return 3
     return 0
 
