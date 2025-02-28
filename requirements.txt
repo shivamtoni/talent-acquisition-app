@@ -4,6 +4,5 @@ transformers
 tf-keras
 beautifulsoup4
 requests
-fuzzywuzzy
 joblib
 PyPDF2

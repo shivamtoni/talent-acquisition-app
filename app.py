@@ -8,10 +8,11 @@ from transformers import pipeline
 import requests
 from bs4 import BeautifulSoup
 import re
-from fuzzywuzzy import fuzz
 import joblib
 import os
 from PyPDF2 import PdfReader
+from geopy.distance import geodesic
+from geopy.geocoders import Nominatim
 
 # Load the trained model
 model = tf.keras.models.load_model('talent_acquisition_model.h5')
@@ -34,6 +35,27 @@ def get_top_universities():
 fortune_500_companies = get_fortune_500()
 top_universities = get_top_universities()
 
+# Geolocation setup
+geolocator = Nominatim(user_agent="talent_acquisition_app")
+
+def get_coordinates(city):
+    try:
+        location = geolocator.geocode(city)
+        return (location.latitude, location.longitude) if location else None
+    except:
+        return None
+
+def is_location_nearby(resume, target_location):
+    cities = re.findall(r'\b([A-Za-z\s]+)\b', resume)
+    target_coords = get_coordinates(target_location)
+    if not target_coords:
+        return 0
+    for city in cities:
+        city_coords = get_coordinates(city)
+        if city_coords and geodesic(target_coords, city_coords).km <= 50:  # 50 km radius
+            return 3
+    return 0
+
 # Feature extraction
 def extract_skills(resume):
     ner_results = ner_pipeline(resume)
@@ -52,17 +74,20 @@ def is_top_university(resume):
 def is_referred(resume):
     return 'referral' in resume.lower() or 'referred by' in resume.lower()
 
-def is_location_nearby(resume, target_location):
-    cities = re.findall(r'\b([A-Za-z\s]+)\b', resume)
-    return any(fuzz.partial_ratio(city.lower(), target_location.lower()) > 80 for city in cities)
+def extract_years_experience(resume):
+    match = re.search(r'(\d+)\s+years?', resume, re.IGNORECASE)
+    return int(match.group(1)) if match else 0
 
 # PDF to text extractor
 def extract_text_from_pdf(pdf_file):
-    pdf_reader = PdfReader(pdf_file)
-    text = ""
-    for page in pdf_reader.pages:
-        text += page.extract_text() or ""
-    return text
+    try:
+        pdf_reader = PdfReader(pdf_file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() or ""
+        return text
+    except Exception as e:
+        return f"Error reading PDF: {str(e)}"
 
 # Streamlit Navigation
 st.sidebar.title("Navigation")
@@ -78,9 +103,16 @@ if page == "Upload Resumes":
         for file in uploaded_files:
             resume_text = extract_text_from_pdf(file)
             resumes.append({'Resume_str': resume_text})
-        df = pd.DataFrame(resumes)
-        df.to_csv('uploaded_resumes.csv', index=False)
-        st.success("Resumes have been processed and saved!")
+        new_df = pd.DataFrame(resumes)
+
+        if os.path.exists('uploaded_resumes.csv'):
+            existing_df = pd.read_csv('uploaded_resumes.csv')
+            combined_df = pd.concat([existing_df, new_df]).drop_duplicates().reset_index(drop=True)
+        else:
+            combined_df = new_df
+
+        combined_df.to_csv('uploaded_resumes.csv', index=False)
+        st.success("Resumes have been processed and saved, duplicates removed!")
 
 # Page 2: Candidate Ranking
 elif page == "Candidate Ranking":
@@ -98,10 +130,14 @@ elif page == "Candidate Ranking":
             df['fortune_500'] = df['Resume_str'].apply(lambda x: int(is_fortune_500(x)))
             df['top_university'] = df['Resume_str'].apply(lambda x: int(is_top_university(x)) * 3)
             df['referral'] = df['Resume_str'].apply(lambda x: int(is_referred(x)))
+            df['years_experience'] = df['Resume_str'].apply(lambda x: extract_years_experience(x))
 
             sequences = tokenizer.texts_to_sequences(df['Resume_str'].values)
             padded = pad_sequences(sequences, maxlen=300, padding='post', truncating='post')
-            additional_features = df[['skills_match', 'location_nearby', 'fortune_500', 'top_university', 'referral']].values
+            additional_features = df[['skills_match', 'location_nearby', 'fortune_500', 'top_university', 'referral', 'years_experience']].values
+
+            print("Padded shape:", padded.shape)
+            print("Additional features shape:", additional_features.shape)
 
             scores = model.predict([padded, additional_features])
             df['Score'] = scores
