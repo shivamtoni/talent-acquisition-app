@@ -117,31 +117,10 @@ st.sidebar.title("Navigation")
 page = st.sidebar.radio("Go to", ["Upload Resumes", "Candidate Ranking"])
 
 # ===========================
-# Page 1: Upload Resumes
+# Page 1: Candidate Ranking
 # ===========================
 
-if page == "Upload Resumes":
-    st.title('Upload Resumes')
-    uploaded_files = st.file_uploader("Upload PDF Resumes", type=['pdf'], accept_multiple_files=True)
-    
-    if uploaded_files:
-        resumes = [{'Resume_str': extract_text_from_pdf(file), 'pdf_file_name': file.name} for file in uploaded_files]
-        new_df = pd.DataFrame(resumes)
-
-        if os.path.exists('uploaded_resumes.csv'):
-            existing_df = pd.read_csv('uploaded_resumes.csv')
-            combined_df = pd.concat([existing_df, new_df]).drop_duplicates().reset_index(drop=True)
-        else:
-            combined_df = new_df
-
-        combined_df.to_csv('uploaded_resumes.csv', index=False)
-        st.success("Resumes processed, duplicates removed!")
-
-# ===========================
-# Page 2: Candidate Ranking
-# ===========================
-
-elif page == "Candidate Ranking":
+if page == "Candidate Ranking":
     st.title('Candidate Ranking')
     job_description = st.text_area("Enter Job Description")
     target_location = st.text_input("Enter Office Location")
@@ -180,3 +159,26 @@ elif page == "Candidate Ranking":
 
     else:
         st.warning("No resumes uploaded. Please go to 'Upload Resumes' page.")
+
+
+# ===========================
+# Page 2: Upload Resumes
+# ===========================
+
+elif page == "Upload Resumes":
+    st.title('Upload Resumes')
+    uploaded_files = st.file_uploader("Upload PDF Resumes", type=['pdf'], accept_multiple_files=True)
+    
+    if uploaded_files:
+        resumes = [{'Resume_str': extract_text_from_pdf(file), 'pdf_file_name': file.name} for file in uploaded_files]
+        new_df = pd.DataFrame(resumes)
+
+        if os.path.exists('uploaded_resumes.csv'):
+            existing_df = pd.read_csv('uploaded_resumes.csv')
+            combined_df = pd.concat([existing_df, new_df]).drop_duplicates().reset_index(drop=True)
+        else:
+            combined_df = new_df
+
+        combined_df.to_csv('uploaded_resumes.csv', index=False)
+        st.success("Resumes processed, duplicates removed!")
+
