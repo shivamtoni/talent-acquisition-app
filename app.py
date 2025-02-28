@@ -14,6 +14,9 @@ import base64
 from PyPDF2 import PdfReader
 from geopy.distance import distance
 from geopy.geocoders import Nominatim
+from functools import lru_cache
+import concurrent.futures
+import asyncio
 
 # ===========================
 # Load Model and Preprocessing Tools
@@ -44,9 +47,10 @@ fortune_500_companies = get_fortune_500()
 top_universities = get_top_universities()
 
 # ===========================
-# Helper Functions
+# Optimized Helper Functions
 # ===========================
 
+@lru_cache(maxsize=1000)
 def get_coordinates(city):
     try:
         location = geolocator.geocode(city)
@@ -69,8 +73,7 @@ def extract_skills(resume):
     ner_results = ner_pipeline(resume)
     return set(result['word'] for result in ner_results if result['entity'] == 'MISC')
 
-def match_skills(resume, job_skills):
-    resume_skills = extract_skills(resume)
+def match_skills(resume_skills, job_skills):
     return len(set(resume_skills) & set(job_skills))
 
 def is_fortune_500(resume):
@@ -109,12 +112,25 @@ def color_score(val):
         return 'background-color: #FFC107; color: black;'
     return 'background-color: #F44336; color: white;'
 
+async def process_resume(file):
+    text = extract_text_from_pdf(file)
+    return {
+        'Resume_str': text,
+        'pdf_file_name': file.name,
+        'skills_match': match_skills(extract_skills(text), []),
+        'location_nearby': is_location_nearby(text, ""),
+        'fortune_500': int(is_fortune_500(text)),
+        'top_university': int(is_top_university(text)),
+        'referral': int(is_referred(text)),
+        'years_experience': extract_years_experience(text)
+    }
+
 # ===========================
 # Streamlit Navigation
 # ===========================
 
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Candidate Ranking", "Upload Resumes"])
+page = st.sidebar.radio("Go to", ["Candidate Ranking", "Upload Resumes", "Download Uploaded Resumes"])
 
 # ===========================
 # Page 1: Candidate Ranking
@@ -132,34 +148,20 @@ if page == "Candidate Ranking":
             st.error("PDF file names missing. Ensure resumes are uploaded with filenames!")
 
         if st.button('Rank Candidates'):
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
             job_skills = list(extract_skills(job_description))
-
-            df['skills_match'] = df['Resume_str'].apply(lambda x: match_skills(x, job_skills) * 3)
-            df['location_nearby'] = df['Resume_str'].apply(lambda x: is_location_nearby(x, target_location) * 3)
-            df['fortune_500'] = df['Resume_str'].apply(lambda x: int(is_fortune_500(x)))
-            df['top_university'] = df['Resume_str'].apply(lambda x: int(is_top_university(x)) * 3)
-            df['referral'] = df['Resume_str'].apply(lambda x: int(is_referred(x)))
-            df['years_experience'] = df['Resume_str'].apply(lambda x: extract_years_experience(x))
-            df['Download Resume'] = df['pdf_file_name'].apply(lambda x: create_download_link(x))
-
-            sequences = tokenizer.texts_to_sequences(df['Resume_str'].values)
-            padded = pad_sequences(sequences, maxlen=300, padding='post', truncating='post')
-            additional_features = df[['skills_match', 'location_nearby', 'fortune_500', 'top_university', 'referral', 'years_experience']].values
-
-            scores = model.predict([padded, additional_features], batch_size=32)
-            df['Score'] = scores.round(1)
+            
+            df['Score'] = model.predict(
+                [pad_sequences(tokenizer.texts_to_sequences(df['Resume_str'].values), maxlen=300, padding='post', truncating='post'),
+                 df[['skills_match', 'location_nearby', 'fortune_500', 'top_university', 'referral', 'years_experience']].values],
+                batch_size=32
+            ).round(1)
 
             styled_df = df[['Resume_str', 'Score', 'Download Resume']].sort_values(by='Score', ascending=False)
-            progress_bar.progress(100)
             st.write("### Candidate Scores (1-10) with Resume Downloads")
             st.markdown(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
     else:
         st.warning("No resumes uploaded. Please go to 'Upload Resumes' page.")
-
 
 # ===========================
 # Page 2: Upload Resumes
@@ -182,3 +184,11 @@ elif page == "Upload Resumes":
         combined_df.to_csv('uploaded_resumes.csv', index=False)
         st.success("Resumes processed, duplicates removed!")
 
+# ===========================
+# Page 3: Download Uploaded Resumes
+# ===========================
+
+elif page == "Download Uploaded Resumes":
+    st.title('Download Uploaded Resumes')
+    if os.path.exists('uploaded_resumes.csv'):
+        with open('uploaded_resumes.csv', 'rb') as file:
