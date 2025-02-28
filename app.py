@@ -114,7 +114,7 @@ def color_score(val):
 # ===========================
 
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Upload Resumes", "Candidate Ranking"])
+page = st.sidebar.radio("Go to", ["Candidate Ranking", "Upload Resumes"])
 
 # ===========================
 # Page 1: Candidate Ranking
